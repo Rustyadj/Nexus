@@ -1,19 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Monitor, Smartphone, Laptop, Tablet, Tv, Printer,
   Lock, MapPin, MoreHorizontal, MessageSquare, Image,
   Folder, Activity, Network, Grid, Shield, Battery,
   Wifi, Search, Plus
 } from 'lucide-react';
-import type { Device } from '../mockData';
-import { DEVICES } from '../mockData';
+import { devicesService, messagesService, photosService } from '../services';
+import type { Device, Message, Photo } from '../services';
 
 /* ── Device icon by type ──────────────────────────── */
 const DeviceIcon: React.FC<{ type: Device['type']; size?: number; color?: string }> = ({ type, size = 14, color }) => {
   const c = color || 'currentColor';
   const props = { size, color: c };
   switch (type) {
-    case 'mobile': return <Smartphone {...props} />;
+    case 'phone': return <Smartphone {...props} />;
     case 'laptop': return <Laptop {...props} />;
     case 'tablet': return <Tablet {...props} />;
     case 'tv': return <Tv {...props} />;
@@ -92,7 +92,7 @@ const OverviewTab: React.FC<{ device: Device }> = ({ device }) => (
           { label: 'IP Address', value: device.ip },
           { label: 'MAC Address', value: device.mac },
           { label: 'Battery', value: device.battery !== undefined ? `${device.battery}%` : '—' },
-          { label: 'Storage', value: device.storage || '—' },
+          { label: 'Storage', value: device.storage ? `${device.storage.used}/${device.storage.total} GB` : '—' },
           { label: 'OS', value: device.os || '—' },
           { label: 'Network', value: device.network },
         ].map(({ label, value }) => (
@@ -170,7 +170,7 @@ const OverviewTab: React.FC<{ device: Device }> = ({ device }) => (
           }} />
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-primary)', marginTop: 6, fontWeight: 500 }}>
-          {device.location.city}, {device.location.state}
+          {device.location ? `${device.location.city}, ${device.location.state}` : 'Unknown'}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{device.lastSeen}</div>
       </div>
@@ -179,62 +179,51 @@ const OverviewTab: React.FC<{ device: Device }> = ({ device }) => (
 );
 
 /* ── Messages tab ─────────────────────────────────── */
-const MessagesTab: React.FC<{ device: Device }> = ({ device }) => (
+const MessagesTab: React.FC<{ messages: Message[]; loading: boolean }> = ({ messages, loading }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', height: '100%' }}>
-    {device.messages.length === 0 ? (
-      <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>No messages on this device.</div>
-    ) : device.messages.map(msg => (
-      <div key={msg.id} style={{
-        padding: '12px 14px',
-        background: 'var(--bg-card)',
-        border: `1px solid ${!msg.read ? 'var(--border-accent)' : 'var(--border)'}`,
-        borderRadius: 'var(--radius)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{msg.from}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {!msg.read && <span className="badge badge-green" style={{ fontSize: 9 }}>NEW</span>}
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{msg.time}</span>
+    {loading
+      ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ height: 60, background: 'var(--bg-card)', borderRadius: 'var(--radius)', opacity: 0.5 }} />)
+      : messages.length === 0
+        ? <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>No messages on this device.</div>
+        : messages.map(msg => (
+          <div key={msg.id} style={{ padding: '12px 14px', background: 'var(--bg-card)', border: `1px solid ${!msg.read ? 'var(--border-accent)' : 'var(--border)'}`, borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{msg.from}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {!msg.read && <span className="badge badge-green" style={{ fontSize: 9 }}>NEW</span>}
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{msg.content}</div>
           </div>
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{msg.body}</div>
-      </div>
-    ))}
+        ))
+    }
   </div>
 );
 
 /* ── Photos tab ───────────────────────────────────── */
-const PhotosTab: React.FC<{ device: Device }> = ({ device }) => (
+const PhotosTab: React.FC<{ photos: Photo[]; loading: boolean }> = ({ photos, loading }) => (
   <div style={{ height: '100%', overflowY: 'auto' }}>
-    {device.photos.length === 0 ? (
-      <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>No photos on this device.</div>
-    ) : (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-        {device.photos.map(photo => (
-          <div key={photo.id} style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              height: 90,
-              background: `linear-gradient(135deg, #1a2240 0%, #0d1520 100%)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Image size={24} color="var(--text-muted)" />
-            </div>
-            <div style={{ padding: '8px 10px' }}>
-              <div style={{ fontSize: 11, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{photo.name}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{photo.size} · {photo.time}</div>
-            </div>
+    {loading
+      ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} style={{ height: 120, background: 'var(--bg-card)', borderRadius: 'var(--radius)', opacity: 0.5 }} />)}
+        </div>
+      : photos.length === 0
+        ? <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>No photos on this device.</div>
+        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+            {photos.map(photo => (
+              <div key={photo.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                <div style={{ height: 90, background: 'linear-gradient(135deg, #1a2240 0%, #0d1520 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Image size={24} color="var(--text-muted)" />
+                </div>
+                <div style={{ padding: '8px 10px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{photo.name}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{(photo.size / 1024 / 1024).toFixed(1)} MB · {new Date(photo.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    )}
+    }
   </div>
 );
 
@@ -250,18 +239,44 @@ const PlaceholderTab: React.FC<{ label: string }> = ({ label }) => (
 const Devices: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'online' | 'offline'>('all');
-  const [selectedId, setSelectedId] = useState(DEVICES[0].id);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedId, setSelectedId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [tabLoading, setTabLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
 
-  const filtered = DEVICES.filter(d => {
+  useEffect(() => {
+    devicesService.getAll().then(list => {
+      setDevices(list);
+      if (list.length > 0) setSelectedId(list[0].id);
+      setListLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    setTabLoading(true);
+    setMessages([]);
+    setPhotos([]);
+    Promise.all([
+      messagesService.getForDevice(selectedId),
+      photosService.getForDevice(selectedId),
+    ]).then(([msgs, phts]) => {
+      setMessages(msgs.data);
+      setPhotos(phts.data);
+      setTabLoading(false);
+    });
+  }, [selectedId]);
+
+  const filtered = devices.filter(d => {
     const matchSearch = d.name.toLowerCase().includes(search.toLowerCase()) || d.ip.includes(search);
     const matchFilter = filter === 'all' || d.status === filter;
     return matchSearch && matchFilter;
   });
 
-  const selected = DEVICES.find(d => d.id === selectedId) || DEVICES[0];
-  const page = Math.ceil(filtered.indexOf(selected) / 8) + 1;
-  const totalPages = Math.ceil(filtered.length / 8);
+  const selected = devices.find(d => d.id === selectedId) ?? devices[0];
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -330,7 +345,7 @@ const Devices: React.FC = () => {
 
         {/* Pagination */}
         <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
-          <span>Showing 1 to {filtered.length} of {DEVICES.length} devices</span>
+          <span>Showing 1 to {filtered.length} of {devices.length} devices</span>
           <div style={{ display: 'flex', gap: 4 }}>
             {[1, 2, 3].map(n => (
               <button key={n} style={{
@@ -347,6 +362,8 @@ const Devices: React.FC = () => {
 
       {/* Right: Device detail */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {!selected && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Loading…</div>}
+        {selected && <>
         {/* Detail header */}
         <div style={{
           padding: '14px 20px',
@@ -401,15 +418,16 @@ const Devices: React.FC = () => {
 
         {/* Tab content */}
         <div style={{ flex: 1, overflow: 'hidden', padding: '16px 20px', background: 'var(--bg-primary)' }}>
-          {activeTab === 'Overview' && <OverviewTab device={selected} />}
-          {activeTab === 'Messages' && <MessagesTab device={selected} />}
-          {activeTab === 'Photos' && <PhotosTab device={selected} />}
+          {activeTab === 'Overview' && selected && <OverviewTab device={selected} />}
+          {activeTab === 'Messages' && <MessagesTab messages={messages} loading={tabLoading} />}
+          {activeTab === 'Photos' && <PhotosTab photos={photos} loading={tabLoading} />}
           {activeTab === 'Files' && <PlaceholderTab label="Files" />}
           {activeTab === 'Activity' && <PlaceholderTab label="Activity" />}
           {activeTab === 'Network' && <PlaceholderTab label="Network" />}
           {activeTab === 'Apps' && <PlaceholderTab label="Apps" />}
           {activeTab === 'Security' && <PlaceholderTab label="Security" />}
         </div>
+        </>}
       </div>
     </div>
   );

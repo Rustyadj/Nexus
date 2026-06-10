@@ -4,9 +4,14 @@ import {
   Home, Monitor, Map, Network, Activity, Rocket,
   Bell, ScrollText, Settings, Shield
 } from 'lucide-react';
-import { ALERTS } from '../mockData';
+import { useState, useEffect } from 'react';
+import { alertsService } from '../services';
 
-const unresolved = ALERTS.filter(a => !a.resolved).length;
+const useBadgeCount = () => {
+  const [count, setCount] = useState(0);
+  useEffect(() => { alertsService.getActive().then(a => setCount(a.length)); }, []);
+  return count;
+};
 
 const NAV = [
   { path: '/', label: 'Home', icon: Home },
@@ -15,7 +20,7 @@ const NAV = [
   { path: '/network', label: 'Network', icon: Network },
   { path: '/activity', label: 'Activity', icon: Activity },
   { path: '/deploy', label: 'Deploy', icon: Rocket },
-  { path: '/alerts', label: 'Alerts', icon: Bell, badge: unresolved },
+  { path: '/alerts', label: 'Alerts', icon: Bell, hasBadge: true },
   { path: '/logs', label: 'Logs', icon: ScrollText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -23,6 +28,7 @@ const NAV = [
 const Sidebar: React.FC = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const alertCount = useBadgeCount();
 
   return (
     <aside style={{
@@ -59,7 +65,8 @@ const Sidebar: React.FC = () => {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-        {NAV.map(({ path, label, icon: Icon, badge }) => {
+        {NAV.map(({ path, label, icon: Icon, hasBadge }) => {
+          const badge = hasBadge ? alertCount : 0;
           const active = pathname === path || (path !== '/' && pathname.startsWith(path));
           return (
             <button
